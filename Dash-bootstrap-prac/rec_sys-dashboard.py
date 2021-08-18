@@ -13,14 +13,18 @@ import plotly.graph_objects as go
 import pandas as pd
 
 from rec_sys import RecSys
+from rec_sys_utils import Cache
 from dash_bootstrap_templates import load_figure_template
+
+rec_sys = RecSys()
+filtered_userIds, filtered_ratings = rec_sys.filter_out_users()
+
+bar_plot_cache = Cache()
+table_cache = Cache()
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LUMEN], title="Layout test")
 
 LOGO = "https://user-images.githubusercontent.com/72614349/110689028-7523dd80-819f-11eb-8cc6-a62b25f99287.png"
-
-rec_sys = RecSys()
-filtered_userIds, filtered_ratings = rec_sys.filter_out_users()
 
 topbar = dbc.Navbar(
     [
@@ -265,6 +269,33 @@ content_second_row = dbc.Row([
         [
             dbc.Card(
                 [
+                    html.Div(html.H6("Temp", className="m-0 font-weight-bold text-primary"),
+                             className="card-header py-3 d-flex flex-row align-items-center justify-content-between"),
+                    html.Div(
+                        [     
+                            dbc.Row(html.H5("To be implemented", className="mb-0 font-weight-bold text-gray-800"), className="d-sm-flex align-items-center justify-content-between mb-4"),
+                            dbc.Row(
+                                html.Div(
+                                    #id="recommendation_table",                                
+                                    #className="table-responsive"
+                                )
+                            )
+                        ],
+                        className="card-body"
+                    )
+                ],
+                className="shadow mb-4"
+            )
+        ],
+        className="col-xl-4 col-lg-7"
+    )
+])
+
+content_third_row = dbc.Row([    
+    html.Div(
+        [
+            dbc.Card(
+                [
                     html.Div(html.H6("Recommendation", className="m-0 font-weight-bold text-primary"),
                              className="card-header py-3 d-flex flex-row align-items-center justify-content-between"),
                     html.Div(
@@ -283,7 +314,7 @@ content_second_row = dbc.Row([
                 className="shadow mb-4"
             )
         ],
-        className="col-xl-4 col-lg-7"
+        className="col-xl-8 col-lg-7"
     )
 ])
 
@@ -294,10 +325,11 @@ content_second_row = dbc.Row([
         Input("target_userId", "value")
     ]
 )
-def make_preferred_genre_graph(target_userId):
-    
-     
+def make_preferred_genre_graph(target_userId):       
     target_userId = int(target_userId)
+    if target_userId in bar_plot_cache:
+        return bar_plot_cache[target_userId]
+    
     target_user_row = rec_sys.get_target_row(filtered_ratings, target_userId)
     
     genre_columns_name = rec_sys.get_genre_names()
@@ -309,9 +341,11 @@ def make_preferred_genre_graph(target_userId):
     #preferred_genre_fig.update_yaxes(tickvals=preferred_genre["preferences"])    
     
     preferred_genre_fig = px.bar(preferred_genre, x="genres", y="preferences")
-    preferred_genre_fig.update_layout(transition_duration=1000)
+    preferred_genre_fig.update_layout(transition_duration=800)
     preferred_genre_fig.update_xaxes(tickvals=preferred_genre["genres"])    
     preferred_genre_fig.update_yaxes(tickvals=[0, 0.25, 0.5, 0.75, 1])    
+    
+    bar_plot_cache.push(target_userId, preferred_genre_fig)
     
     return preferred_genre_fig
 
@@ -321,6 +355,8 @@ def make_preferred_genre_graph(target_userId):
 )
 def make_recommendation_table(target_userId):
     target_userId = int(target_userId)
+    if target_userId in table_cache:
+        return table_cache[target_userId]
     
     _, src_userId_array = rec_sys.sample_bounded_userId(filtered_userIds)
     recommended_movies = rec_sys.operate_rec_sys(filtered_ratings, target_userId, src_userId_array)
@@ -328,8 +364,11 @@ def make_recommendation_table(target_userId):
     table = dash_table.DataTable(
         data = recommended_movies.to_dict("records"),
         columns=[{"id": c, "name": c} for c in recommended_movies.columns],
+        style_cell={"textAlign": "left"},
         page_size=10
     )
+    
+    table_cache.push(target_userId, table)
     
     return table
     
@@ -354,6 +393,7 @@ app.layout = html.Div(
                                     ),                                    
                                     content_first_row,
                                     content_second_row,
+                                    content_third_row,
                                 ],
                                 fluid=True
                             ),
